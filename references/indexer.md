@@ -31,12 +31,20 @@ When Git is available and the root is inside a worktree, `git ls-files` finds
 tracked and non-ignored untracked files under that root. Ignored tracked files
 are still included, as they are with Git. Submodules are not recursively indexed.
 Git is used only for discovery; the indexer reads current working files.
+Index paths use POSIX separators, including macOS-style relatives such as
+`clients/billing.py`. A listing that uses backslashes is treated as a
+Windows-style relative path when that nested file exists, and is stored with
+`/`. A single filename that itself contains a backslash, which is legal on
+macOS, is left unchanged when the nested interpretation is not a real file.
 
 Without Git, it walks the target directory. This mode **does not parse
 `.gitignore` or other ignore files** and reports a warning. Both modes exclude
 common dependency/build directories (see `EXCLUDED_DIRS` in the script). Add
-project-specific exclusions with `--exclude`. Symlinks are never followed;
-unreadable, non-UTF-8, binary, and oversized source files are skipped. Run on a
+project-specific exclusions with `--exclude`. Symlinks inside the tree are never
+followed. A symlink above the project, such as macOS `/tmp`, does not hide the
+files underneath it. Lexical aliases of the same directory (for example
+`/var/...` and `/private/var/...`) still produce paths relative to the root.
+Unreadable, non-UTF-8, binary, and oversized source files are skipped. Run on a
 stable checkout; this lightweight local tool does not provide filesystem race
 isolation against concurrently changing paths.
 

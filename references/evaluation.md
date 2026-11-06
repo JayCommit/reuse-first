@@ -131,3 +131,34 @@ do not show that loading the skill changed behavior.
 `.github/workflows/ci.yml` was added for the public repository. It installs
 Python and runs the unit tests on Python 3.10 and 3.11. It is not historical
 evidence. This section does not record a GitHub Actions conclusion.
+
+## v0.0.2 Linux check — 2026-11-06
+
+This section records a later check on Linux for the install scripts and path
+handling. It does not replace the Windows results above and it is not a macOS
+or Windows run. `scripts/install.ps1` was not executed. There is still no
+without-skill baseline and no measured reduction in duplication. No
+skill-creator validator is installed here, so it was not run. Automatic
+discovery in a newly launched agent session was not tested. Billing fixture
+stubs were not solved and their acceptance checks were not run.
+
+Host: Linux. `python3` reported Python 3.10.22. `python3.11` reported Python
+3.11.2. Git was available. Commands were run from the repository root.
+
+| Command | Result |
+| --- | --- |
+| `python3 -m unittest discover -s tests -v` | 19 tests, OK, 0 skipped (Python 3.10.22) |
+| `python3.11 -m unittest discover -s tests -v` | 19 tests, OK, 0 skipped (Python 3.11.2) |
+| `python3 scripts/pattern_index.py --help` | exit 0 |
+| `python3 scripts/pattern_index.py tests/fixtures/billing_app --query format_money --no-git` | exit 0; 2 matches, `legacy.py` and `presentation.py`. Stderr: filesystem mode does not read ignore files (expected) |
+| `python3 scripts/pattern_index.py tests/fixtures/billing_app --query not-present --format json` | exit 0; JSON `files: []`; discovery `git`; `warnings` empty |
+| `bash -n scripts/install.sh` | exit 0 |
+| `git diff --check -- .` | exit 0 |
+
+The unit tests ran `scripts/install.sh` with `HOME` pointed at a temporary
+directory on this machine and with project scope pointed at another temporary
+directory. That is not macOS and not Windows. The installed `SKILL.md` was at
+the destination root, `scripts/pattern_index.py` was beside it, a second copy
+did not nest `reuse-first/reuse-first` or `scripts/scripts`, and the installed
+indexer returned `legacy.py` and `presentation.py` for `format_money`.
+PowerShell was not available, so `scripts/install.ps1` was only reviewed.

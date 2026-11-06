@@ -11,6 +11,8 @@ compliance, proves compatibility, or detects duplicate code.
 - `references/`: on-demand examples, indexer contract, and evaluation evidence.
 - `agents/openai.yaml`: skill display metadata and example invocation.
 - `scripts/pattern_index.py`: standalone standard-library CLI.
+- `scripts/install.sh` and `scripts/install.ps1`: copy the skill into host
+  directories. Bash is the macOS form; PowerShell is the Windows form.
 - `tests/test_pattern_index.py`: automated indexer and portability checks.
 - `tests/fixtures/billing_app/`: intentionally unfinished coding exercises and
   `check_tasks.py` acceptance checks; not production code.

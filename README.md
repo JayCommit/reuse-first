@@ -6,45 +6,233 @@ behavior; it cannot enforce compliance or prevent duplicate code.
 
 ## Install
 
-Clone or download this project. From the folder containing `SKILL.md`, copy the
-skill into your agent's skill directory. No packages are required for the skill.
+Clone or download this project. No packages are required. Run the commands
+from the directory that contains `SKILL.md` (the repository root). The copy
+puts `SKILL.md` at the destination root and keeps `scripts/pattern_index.py`
+beside it. Do not copy the repository directory into a folder that is already
+named `reuse-first`; that nests a second `reuse-first` and the agent will not
+see `SKILL.md`.
 
-For a new personal Codex installation, use either:
+macOS (`cp` and `$HOME`) is the primary form. Windows PowerShell (`Copy-Item`)
+is second. The v0.0.2 check did not execute these commands on macOS or Windows;
+see [evaluation](references/evaluation.md).
 
-**PowerShell**
-
-```powershell
-$reuseFirstPath = Join-Path $HOME ".agents/skills/reuse-first"
-New-Item -ItemType Directory -Path $reuseFirstPath -Force | Out-Null
-Copy-Item SKILL.md, agents, references, scripts, tests, README.md, LICENSE -Destination $reuseFirstPath -Recurse
-```
-
-**Bash**
+**macOS and other Bash hosts**
 
 ```sh
-mkdir -p "$HOME/.agents/skills/reuse-first"
-cp -R SKILL.md agents references scripts tests README.md LICENSE "$HOME/.agents/skills/reuse-first/"
+bash scripts/install.sh
+bash scripts/install.sh --host cursor --scope project
 ```
 
-These use the user skill directory in [official Codex documentation](https://learn.chatgpt.com/docs/build-skills).
-If the skill does not appear, restart Codex. Invoke it explicitly:
+**Windows (PowerShell)**
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install.ps1 --host cursor --scope project
+```
+
+`--host` is `grok`, `grok-bot`, `cursor`, `openai`, `antigravity`, `claude`, or
+`all` (default `all`). `--scope` is `user` (default) or `project`. User scope
+writes under `$HOME`. Project scope writes under the current directory.
+
+Copied items: `SKILL.md`, `agents/`, `references/`, `scripts/`, `tests/`,
+`README.md`, and `LICENSE`. `agents/openai.yaml` stays in the skill folder.
+
+Manual copy uses the same items. Remove an existing destination item before
+copying it again so `scripts` does not become `scripts/scripts`.
+
+### 1. Grok
+
+User: `~/.grok/skills/reuse-first/`. Project: `.grok/skills/reuse-first/` from
+the project root. Invoke `/reuse-first`.
+
+**macOS**
+
+```sh
+dest="$HOME/.grok/skills/reuse-first"
+mkdir -p "$dest"
+for item in SKILL.md agents references scripts tests README.md LICENSE; do
+  rm -rf "$dest/$item"
+  cp -R "$item" "$dest/$item"
+done
+```
+
+**Windows**
+
+```powershell
+$dest = Join-Path $HOME ".grok\skills\reuse-first"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+foreach ($item in @("SKILL.md", "agents", "references", "scripts", "tests", "README.md", "LICENSE")) {
+  $target = Join-Path $dest $item
+  if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+  Copy-Item $item -Destination $target -Recurse
+}
+```
+
+### 2. Grok Bot
+
+On the bot computer the user skill is `~/.grok/skills/reuse-first/` and a
+project workspace uses `.grok/skills/reuse-first/`. It is the same `SKILL.md`
+as Grok. Invoke `/reuse-first`.
+
+The macOS `cp` / `$HOME` commands and the Windows `Copy-Item` commands are the
+Grok commands above (same destination). If you cannot copy files onto that
+computer yourself, paste this prompt:
 
 ```text
-Use $reuse-first to add a customer picker to the invoice form.
+Install the reuse-first skill on this computer. Clone https://github.com/JayCommit/reuse-first and copy that checkout so SKILL.md is at ~/.grok/skills/reuse-first/SKILL.md, with scripts/ beside SKILL.md. Do not nest another reuse-first directory inside it. Use that same SKILL.md. Invoke /reuse-first.
 ```
 
-For another agent, load `SKILL.md` through its supported skill mechanism, or ask
-it to read and follow that file explicitly. Discovery varies by agent.
+### 3. Cursor
+
+User: `~/.cursor/skills/reuse-first/`. Project: `.cursor/skills/reuse-first/`.
+The frontmatter `name` is `reuse-first`, matching the folder. Invoke
+`/reuse-first`.
+
+**macOS**
+
+```sh
+dest="$HOME/.cursor/skills/reuse-first"
+mkdir -p "$dest"
+for item in SKILL.md agents references scripts tests README.md LICENSE; do
+  rm -rf "$dest/$item"
+  cp -R "$item" "$dest/$item"
+done
+```
+
+**Windows**
+
+```powershell
+$dest = Join-Path $HOME ".cursor\skills\reuse-first"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+foreach ($item in @("SKILL.md", "agents", "references", "scripts", "tests", "README.md", "LICENSE")) {
+  $target = Join-Path $dest $item
+  if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+  Copy-Item $item -Destination $target -Recurse
+}
+```
+
+### 4. OpenAI / ChatGPT
+
+User: `~/.agents/skills/reuse-first/`. Project: `.agents/skills/reuse-first/`.
+Keep `agents/openai.yaml`. Codex invoke: `$reuse-first`. In the ChatGPT app,
+zip the skill folder (the directory whose root is `SKILL.md`) and use
+Plugins → Skills → Add → Upload. Do not add another `reuse-first` wrapper
+inside that folder.
+
+The user directory is the one in the
+[Codex skills documentation](https://learn.chatgpt.com/docs/build-skills).
+If the skill does not appear, restart Codex.
+
+**macOS**
+
+```sh
+dest="$HOME/.agents/skills/reuse-first"
+mkdir -p "$dest"
+for item in SKILL.md agents references scripts tests README.md LICENSE; do
+  rm -rf "$dest/$item"
+  cp -R "$item" "$dest/$item"
+done
+```
+
+**Windows**
+
+```powershell
+$dest = Join-Path $HOME ".agents\skills\reuse-first"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+foreach ($item in @("SKILL.md", "agents", "references", "scripts", "tests", "README.md", "LICENSE")) {
+  $target = Join-Path $dest $item
+  if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+  Copy-Item $item -Destination $target -Recurse
+}
+```
+
+### 5. Antigravity
+
+`SKILL.md` includes `description` (required). Invoke `/reuse-first`. The folder
+is one level deep: `SKILL.md` is directly inside `reuse-first/`, not
+`reuse-first/reuse-first/SKILL.md`.
+
+- Project: `.agents/skills/reuse-first/`
+- User, app and IDE: `~/.gemini/config/skills/reuse-first/`
+- CLI: `~/.gemini/antigravity-cli/skills/reuse-first/`
+
+**macOS**
+
+```sh
+for dest in "$HOME/.gemini/config/skills/reuse-first" "$HOME/.gemini/antigravity-cli/skills/reuse-first"; do
+  mkdir -p "$dest"
+  for item in SKILL.md agents references scripts tests README.md LICENSE; do
+    rm -rf "$dest/$item"
+    cp -R "$item" "$dest/$item"
+  done
+done
+```
+
+Project scope uses one destination, `.agents/skills/reuse-first` from the
+project root. The CLI path is a user directory.
+
+**Windows**
+
+```powershell
+foreach ($dest in @(
+  (Join-Path $HOME ".gemini\config\skills\reuse-first"),
+  (Join-Path $HOME ".gemini\antigravity-cli\skills\reuse-first")
+)) {
+  New-Item -ItemType Directory -Path $dest -Force | Out-Null
+  foreach ($item in @("SKILL.md", "agents", "references", "scripts", "tests", "README.md", "LICENSE")) {
+    $target = Join-Path $dest $item
+    if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+    Copy-Item $item -Destination $target -Recurse
+  }
+}
+```
+
+### 6. Claude
+
+User: `~/.claude/skills/reuse-first/`. Project: `.claude/skills/reuse-first/`.
+Invoke `/reuse-first`.
+
+**macOS**
+
+```sh
+dest="$HOME/.claude/skills/reuse-first"
+mkdir -p "$dest"
+for item in SKILL.md agents references scripts tests README.md LICENSE; do
+  rm -rf "$dest/$item"
+  cp -R "$item" "$dest/$item"
+done
+```
+
+**Windows**
+
+```powershell
+$dest = Join-Path $HOME ".claude\skills\reuse-first"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+foreach ($item in @("SKILL.md", "agents", "references", "scripts", "tests", "README.md", "LICENSE")) {
+  $target = Join-Path $dest $item
+  if (Test-Path $target) { Remove-Item $target -Recurse -Force }
+  Copy-Item $item -Destination $target -Recurse
+}
+```
 
 ## Optional indexer
 
 The script is included in the copy above. It needs Python 3.10+ and its standard
-library; there is no `pip install` step. Run from any directory, replacing the
-target path with your codebase:
+library; there is no `pip install` step. Run from any directory. This example
+is a user-level Grok install; use the skill directory you actually copied.
+
+**macOS**
 
 ```sh
-python "$HOME/.agents/skills/reuse-first/scripts/pattern_index.py" "/path/to/codebase" --query "client retry"
-python "$HOME/.agents/skills/reuse-first/scripts/pattern_index.py" "/path/to/codebase" --format json
+python "$HOME/.grok/skills/reuse-first/scripts/pattern_index.py" "/path/to/codebase" --query "client retry"
+python "$HOME/.grok/skills/reuse-first/scripts/pattern_index.py" "/path/to/codebase" --format json
+```
+
+**Windows**
+
+```powershell
+python (Join-Path $HOME ".grok\skills\reuse-first\scripts\pattern_index.py") "C:\path\to\codebase" --query "client retry"
 ```
 
 Alternatively, run the script from this project's root without installing:
@@ -94,12 +282,12 @@ and correctness. Include ambiguous matches and a genuinely missing capability.
   No matches does not prove absence. Source reads are still necessary.
 - Paths and symbols can be sensitive. Output stays local; review before sharing.
 - Historical release checks ran on Windows with Python 3.15.2; see
-  [evaluation](references/evaluation.md). A later Linux check on 2026-11-06
-  reran the unit tests with Python 3.10.22 and 3.11.2 and followed the Bash
-  install into a temporary directory on that same machine. PowerShell was not
-  re-run. A newly launched agent session was not checked, so discovery is
-  unverified. There is no without-skill baseline and no measured reduction in
-  duplication.
+  [evaluation](references/evaluation.md). That record is unchanged. A later
+  Linux check is in the same file. v0.0.2 install scripts were syntax-checked
+  and the Bash installer was run against a temporary `HOME` on Linux only.
+  They were not executed on macOS or Windows, and PowerShell was not run.
+  A newly launched agent session was not checked, so discovery is unverified.
+  There is no without-skill baseline and no measured reduction in duplication.
 - `.github/workflows/ci.yml` was added for the public repository. It is not
   historical evidence and this README does not claim the GitHub Actions run
   passed. See the repository Actions tab for the result of a given commit.
