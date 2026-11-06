@@ -1,0 +1,4 @@
+interface:
+  display_name: "Reuse First"
+  short_description: "Find and extend existing code before adding more"
+  default_prompt: "Use $reuse-first to implement this change using existing components, utilities, and patterns where compatible."

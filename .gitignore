@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+.test-work/
+.venv/
+venv/
+.env
+.env.*
+*.pem
+*.key
+secrets.*
+credentials.*
+.DS_Store
+Thumbs.db
