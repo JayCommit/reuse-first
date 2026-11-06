@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -197,6 +198,196 @@ class IndexTests(unittest.TestCase):
                     target = (doc.parent / link.split("#")[0]).resolve()
                     self.assertTrue(target.is_relative_to(copy.resolve()), link)
                     self.assertTrue(target.exists(), link)
+
+
+class PathPortabilityTests(unittest.TestCase):
+    def setUp(self):
+        scratch = PROJECT / ".test-work"
+        scratch.mkdir(exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(dir=scratch)
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def write(self, name, body):
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(body, encoding="utf-8")
+        return path
+
+    def git_index(self, payload, **kwargs):
+        completed = subprocess.CompletedProcess(
+            args=["git"], returncode=0, stdout=payload, stderr=b"",
+        )
+        with patch.object(scanner.subprocess, "run", return_value=completed):
+            return scanner.index(self.root, **kwargs)
+
+    def test_macos_style_git_paths_need_no_backslashes(self):
+        self.write("My Files/b.py", "def load_account(): pass\n")
+        self.write("clients/billing.py", "class BillingClient:\n    pass\n")
+        result = self.git_index(b"My Files/b.py\0clients/billing.py\0", query="billing")
+        self.assertEqual(result["discovery"], "git")
+        self.assertEqual([entry["path"] for entry in result["files"]], ["clients/billing.py"])
+        self.assertEqual(result["files"][0]["symbols"][0]["name"], "BillingClient")
+        self.assertIn("client", result["files"][0]["categories"])
+
+    def test_windows_separators_normalize_without_hiding_backslash_names(self):
+        self.write("clients/billing.py", "class BillingClient:\n    pass\n")
+        self.write("node_modules/pkg/index.js", "export function duplicate() {}\n")
+        literal = self.write("keep\\slash.py", "def keep_slash(): pass\n")
+        self.assertEqual(literal.name, "keep\\slash.py")
+        result = self.git_index(
+            "clients\\billing.py\0node_modules\\pkg\\index.js\0keep\\slash.py\0".encode(),
+            excludes=["scratch"],
+        )
+        paths = [entry["path"] for entry in result["files"]]
+        self.assertIn("clients/billing.py", paths)
+        self.assertNotIn("clients\\billing.py", paths)
+        self.assertNotIn("node_modules/pkg/index.js", paths)
+        self.assertGreaterEqual(result["skipped"].get("excluded", 0), 1)
+        literal_entry = next(entry for entry in result["files"] if "keep" in entry["path"])
+        self.assertEqual(literal_entry["path"], "keep\\slash.py")
+        self.assertEqual(literal_entry["symbols"][0]["name"], "keep_slash")
+
+    def test_symlink_above_project_does_not_hide_files(self):
+        project = self.root / "realhome" / "proj"
+        project.mkdir(parents=True)
+        (project / "a.py").write_text("def hello(): pass\n", encoding="utf-8")
+        link_home = self.root / "linkhome"
+        try:
+            link_home.symlink_to(project.parent, target_is_directory=True)
+        except OSError:
+            self.skipTest("Creating symlinks is unavailable on this platform")
+        linked = link_home / "proj"
+
+        def identity(path, strict=False):
+            return path
+
+        with patch.object(Path, "resolve", identity):
+            result = scanner.index(linked, no_git=True)
+        self.assertEqual([entry["path"] for entry in result["files"]], ["a.py"])
+        self.assertNotIn("symlink", result["skipped"])
+
+    def test_aliased_macos_prefix_stays_relative(self):
+        project = self.root / "project"
+        (project / "clients").mkdir(parents=True)
+        (project / "clients" / "billing.py").write_text(
+            "class BillingClient:\n    pass\n", encoding="utf-8",
+        )
+        alias = self.root / "alias"
+        try:
+            alias.symlink_to(project, target_is_directory=True)
+        except OSError:
+            self.skipTest("Creating symlinks is unavailable on this platform")
+
+        def fake_walk(root, followlinks=False, onerror=None):
+            yield str(alias), ["clients"], []
+            yield str(alias / "clients"), [], ["billing.py"]
+
+        with patch.object(scanner.os, "walk", fake_walk):
+            result = scanner.index(project, no_git=True)
+        self.assertEqual([entry["path"] for entry in result["files"]], ["clients/billing.py"])
+
+
+class InstallScriptTests(unittest.TestCase):
+    def setUp(self):
+        scratch = PROJECT / ".test-work"
+        scratch.mkdir(exist_ok=True)
+        self.temp = tempfile.TemporaryDirectory(dir=scratch)
+        self.addCleanup(self.temp.cleanup)
+        self.home = Path(self.temp.name) / "home"
+        self.project = Path(self.temp.name) / "project"
+        self.home.mkdir()
+        self.project.mkdir()
+
+    def run_install(self, *args):
+        env = os.environ.copy()
+        env["HOME"] = str(self.home)
+        return subprocess.run(
+            ["bash", str(PROJECT / "scripts" / "install.sh"), *args],
+            cwd=self.project,
+            env=env,
+            capture_output=True,
+            text=True,
+        )
+
+    def assert_skill(self, dest):
+        self.assertTrue((dest / "SKILL.md").is_file(), dest)
+        self.assertEqual((dest / "SKILL.md").read_bytes(), (PROJECT / "SKILL.md").read_bytes())
+        self.assertTrue((dest / "scripts" / "pattern_index.py").is_file(), dest)
+        self.assertTrue((dest / "agents" / "openai.yaml").is_file(), dest)
+        self.assertFalse((dest / "reuse-first" / "SKILL.md").exists(), dest)
+        self.assertFalse((dest / "scripts" / "scripts").exists(), dest)
+        text = (dest / "SKILL.md").read_text(encoding="utf-8")
+        self.assertIn("name: reuse-first", text)
+        self.assertIn("description:", text)
+
+    def test_install_sh_syntax(self):
+        result = subprocess.run(
+            ["bash", "-n", str(PROJECT / "scripts" / "install.sh")],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_user_default_install_is_not_nested(self):
+        first = self.run_install()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("https://github.com/JayCommit/reuse-first", first.stdout)
+        user_dests = [
+            self.home / ".grok/skills/reuse-first",
+            self.home / ".cursor/skills/reuse-first",
+            self.home / ".agents/skills/reuse-first",
+            self.home / ".gemini/config/skills/reuse-first",
+            self.home / ".gemini/antigravity-cli/skills/reuse-first",
+            self.home / ".claude/skills/reuse-first",
+        ]
+        for dest in user_dests:
+            self.assert_skill(dest)
+        self.assertFalse((self.project / ".grok").exists())
+        second = self.run_install("--host", "all", "--scope", "user")
+        self.assertEqual(second.returncode, 0, second.stderr)
+        for dest in user_dests:
+            self.assert_skill(dest)
+        installed = user_dests[0] / "scripts" / "pattern_index.py"
+        proc = subprocess.run(
+            [sys.executable, str(installed),
+             str(PROJECT / "tests" / "fixtures" / "billing_app"),
+             "--query", "format_money", "--no-git", "--format", "json"],
+            capture_output=True, text=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(
+            [entry["path"] for entry in json.loads(proc.stdout)["files"]],
+            ["legacy.py", "presentation.py"],
+        )
+
+    def test_project_scope_and_single_host(self):
+        result = self.run_install("--scope", "project", "--host", "all")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for dest in (
+            self.project / ".grok/skills/reuse-first",
+            self.project / ".cursor/skills/reuse-first",
+            self.project / ".agents/skills/reuse-first",
+            self.project / ".claude/skills/reuse-first",
+        ):
+            self.assert_skill(dest)
+        self.assertFalse((self.project / ".gemini").exists())
+        self.assertFalse((self.project / ".agents/skills/reuse-first/reuse-first").exists())
+        self.assertFalse((self.home / ".grok").exists())
+        cursor = self.run_install("--host", "cursor", "--scope", "project")
+        self.assertEqual(cursor.returncode, 0, cursor.stderr)
+        self.assert_skill(self.project / ".cursor/skills/reuse-first")
+        bad = self.run_install("--host", "notepad")
+        self.assertEqual(bad.returncode, 2)
+        self.assertIn("unknown host", bad.stderr)
+
+    def test_grok_bot_user_path_and_prompt(self):
+        result = self.run_install("--host", "grok-bot", "--scope", "user")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_skill(self.home / ".grok/skills/reuse-first")
+        self.assertIn("https://github.com/JayCommit/reuse-first", result.stdout)
+        self.assertIn("/reuse-first", result.stdout)
+        self.assertFalse((self.home / ".cursor").exists())
+        self.assertFalse((self.home / ".claude").exists())
 
 
 if __name__ == "__main__":

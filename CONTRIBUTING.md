@@ -26,6 +26,11 @@ a task, copy that fixture outside this repository and follow
 [evaluation](references/evaluation.md). Passing those checks shows the task
 commands run; it does not prove an agent followed the skill.
 
+`scripts/install.sh` and `scripts/install.ps1` copy the skill into a host skill
+directory with `SKILL.md` at that destination's root. Check the Bourne script
+with `bash -n scripts/install.sh`. Do not claim the PowerShell script ran on
+Windows unless it did, and do not describe a macOS run that did not happen.
+
 Keep the runtime and tests on the Python standard library. Do not add packaging,
 enforcement features, or third-party dependencies. Preserve indexer JSON schema
 version 1, relative paths, warnings, and successful empty results.

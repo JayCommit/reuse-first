@@ -38,6 +38,30 @@ DECLARATIONS = [
 ]
 
 
+def posix_relative(root: Path, relative: str) -> tuple[Path, str]:
+    """Map a discovered path to a filesystem path and a POSIX index path.
+
+    macOS-style relatives already use ``/`` and are joined one segment at a
+    time, so a backslash is never required. A listing that uses only
+    backslashes is a Windows-style relative path when that nested file or its
+    parent exists; otherwise a backslash is kept as part of one filename,
+    which is legal on macOS.
+    """
+    if "\\" not in relative:
+        parts = [part for part in relative.split("/") if part and part != "."]
+        return (root.joinpath(*parts) if parts else root), "/".join(parts)
+
+    parts = [part for part in relative.replace("\\", "/").split("/") if part and part != "."]
+    nested = root.joinpath(*parts) if parts else root
+    index = "/".join(parts)
+    literal = root.joinpath(relative)
+    if len(parts) > 1 and (nested.exists() or (not literal.exists() and nested.parent.exists())):
+        return nested, index
+    if literal.exists() or len(parts) <= 1:
+        return literal, relative
+    return nested, index
+
+
 def excluded(path: str, patterns: list[str]) -> bool:
     """Match custom globs against a POSIX path or any of its ancestors."""
     parts = path.split("/")
@@ -50,6 +74,36 @@ def excluded(path: str, patterns: list[str]) -> bool:
         fnmatch.fnmatchcase(candidate, pattern.rstrip("/"))
         for pattern in patterns for candidate in ancestors
     )
+
+
+def filesystem_name(root: Path, path: Path) -> str | None:
+    """Return a POSIX relative path, including when macOS aliases differ lexically.
+
+    ``/var/...`` and ``/private/var/...`` can name the same file. Prefer a
+    lexical relative path, then a resolved one. Return None if the file is
+    actually outside the root.
+    """
+    try:
+        return path.relative_to(root).as_posix()
+    except ValueError:
+        try:
+            return path.resolve().relative_to(root.resolve()).as_posix()
+        except (ValueError, OSError):
+            return None
+
+
+def inside_symlink(path: Path, root: Path) -> bool:
+    """True when ``path`` or a directory inside ``root`` is a symlink.
+
+    Ancestors above the project do not count. On macOS a parent such as
+    ``/tmp`` may be a symlink; that must not hide every file in the tree.
+    """
+    current = path
+    while current != root and current != current.parent:
+        if current.is_symlink():
+            return True
+        current = current.parent
+    return False
 
 
 def discover(root: Path, no_git: bool) -> tuple[list[str], str, list[str]]:
@@ -82,7 +136,11 @@ def discover(root: Path, no_git: bool) -> tuple[list[str], str, list[str]]:
             if name not in EXCLUDED_DIRS and not (Path(directory) / name).is_symlink()
         )
         for name in sorted(files):
-            paths.append((Path(directory) / name).relative_to(root).as_posix())
+            relative = filesystem_name(root, Path(directory) / name)
+            if relative:
+                paths.append(relative)
+            else:
+                warnings.append("Skipped a path that does not stay inside the root.")
     return sorted(paths), "filesystem", warnings
 
 
@@ -110,17 +168,20 @@ def index(root: Path, *, query: str = "", no_git: bool = False,
     entries = []
     scanned = 0
     terms = query.casefold().split()
-    for relative in paths:
+    for discovered in paths:
+        path, relative = posix_relative(root, discovered)
+        if not relative:
+            continue
         if excluded(relative, excludes or []):
             skipped["excluded"] += 1
             continue
-        path = root / relative
         if path.suffix.lower() not in EXTENSIONS:
             skipped["unsupported_extension"] += 1
             continue
         try:
-            # Never follow file or directory symlinks, including Git-discovered ones.
-            if any(part.is_symlink() for part in [path, *path.parents] if part != root):
+            # Never follow symlinks inside the tree, including Git-discovered ones.
+            # A symlink above the project (common for macOS /tmp) is not a hit.
+            if inside_symlink(path, root):
                 skipped["symlink"] += 1
                 continue
             if not path.resolve().is_relative_to(root):
